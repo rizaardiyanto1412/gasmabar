@@ -43,6 +43,13 @@
       "when": 1728184935034,
       "tag": "0005_white_professor_monster",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1728189047364,
+      "tag": "0006_rare_namor",
+      "breakpoints": true
     }
   ]
 }

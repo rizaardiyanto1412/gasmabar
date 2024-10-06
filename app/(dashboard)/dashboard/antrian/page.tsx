@@ -31,6 +31,7 @@ export default function AntrianPage() {
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFastTrackEnabled, setIsFastTrackEnabled] = useState(false);
+  const [gamesPerRound, setGamesPerRound] = useState(4);
 
   const fetchRounds = useCallback(async () => {
     if (!user) return;
@@ -41,6 +42,7 @@ export default function AntrianPage() {
       setRounds(fetchedRounds.filter(round => !round.isCurrent));
       setCurrentRound(fetchedRounds.find(round => round.isCurrent) || null);
       setIsFastTrackEnabled(user.fastTrackEnabled || false);
+      setGamesPerRound(user.gamesPerRound || 4);
     } catch (error) {
       console.error('Error fetching rounds:', error);
     } finally {
@@ -80,7 +82,7 @@ export default function AntrianPage() {
         targetRound.games.splice(insertIndex, 0, newGame);
 
         // Redistribute games if necessary
-        while (targetRound.games.length > 4) {
+        while (targetRound.games.length > gamesPerRound) {
           const lastGame = targetRound.games.pop()!;
           if (!lastGame.isFastTrack) {
             let nextRound = updatedRounds[updatedRounds.indexOf(targetRound) + 1];
@@ -100,7 +102,7 @@ export default function AntrianPage() {
       } else {
         // For non-Fast Track items, add to the last round or create a new one if full
         let targetRound = updatedRounds[updatedRounds.length - 1];
-        if (!targetRound || targetRound.games.length >= 4) {
+        if (!targetRound || targetRound.games.length >= gamesPerRound) {
           const newRound = await createNewRound(user.id, updatedRounds.length + 1);
           targetRound = { ...newRound, games: [] };
           updatedRounds.push(targetRound);

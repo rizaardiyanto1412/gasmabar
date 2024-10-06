@@ -305,6 +305,7 @@ const updateAccountSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
   fastTrackEnabled: z.enum(['true', 'false']).transform(val => val === 'true'),
+  gamesPerRound: z.string().transform(val => parseInt(val, 10)), // Change this line
 });
 
 export const updateAccount = validatedActionWithUser(
@@ -317,6 +318,7 @@ export const updateAccount = validatedActionWithUser(
           name: data.name,
           email: data.email,
           fastTrackEnabled: data.fastTrackEnabled,
+          gamesPerRound: data.gamesPerRound, // This is now a number
         })
         .where(eq(users.id, user.id));
 

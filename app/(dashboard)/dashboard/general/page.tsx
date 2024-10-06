@@ -8,9 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useUser } from '@/lib/auth';
 import { updateAccount } from '@/app/(login)/actions';
-import { Switch } from '@/components/ui/switch'; // Add this import
-import { useState } from 'react'; // Add this import
-import { useEffect } from 'react'; // Add this import
+import { Switch } from '@/components/ui/switch';
+import { useState, useEffect } from 'react';
 
 type ActionState = {
   error?: string;
@@ -25,10 +24,12 @@ export default function GeneralPage() {
   );
 
   const [isFastTrackEnabled, setIsFastTrackEnabled] = useState(false);
+  const [gamesPerRound, setGamesPerRound] = useState(4);
 
   useEffect(() => {
     if (user) {
       setIsFastTrackEnabled(user.fastTrackEnabled ?? false);
+      setGamesPerRound(user.gamesPerRound ?? 4);
     }
   }, [user]);
 
@@ -36,8 +37,8 @@ export default function GeneralPage() {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     
-    // Convert the boolean to a string 'true' or 'false'
     formData.set('fastTrackEnabled', isFastTrackEnabled.toString());
+    formData.set('gamesPerRound', gamesPerRound.toString()); // Convert to string
 
     startTransition(() => {
       formAction(formData);
@@ -84,6 +85,19 @@ export default function GeneralPage() {
                 onCheckedChange={setIsFastTrackEnabled}
               />
               <Label htmlFor="fastTrackEnabled">Enable Fast Track</Label>
+            </div>
+            <div>
+              <Label htmlFor="gamesPerRound">Games Per Round</Label>
+              <Input
+                id="gamesPerRound"
+                name="gamesPerRound"
+                type="number"
+                min="1"
+                max="10"
+                value={gamesPerRound}
+                onChange={(e) => setGamesPerRound(parseInt(e.target.value, 10))}
+                required
+              />
             </div>
             {state.error && (
               <p className="text-red-500 text-sm">{state.error}</p>

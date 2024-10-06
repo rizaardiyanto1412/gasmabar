@@ -19,6 +19,7 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
   fastTrackEnabled: boolean('fast_track_enabled').notNull().default(false), // Add this line
+  gamesPerRound: integer('games_per_round').notNull().default(4), // Add this line
 });
 
 export const teams = pgTable('teams', {
@@ -139,7 +140,9 @@ export const roundGames = pgTable('round_games', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
-export type User = typeof users.$inferSelect;
+export type User = typeof users.$inferSelect & {
+  gamesPerRound: number;
+};
 export type NewUser = typeof users.$inferInsert;
 export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;

@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "games_per_round" integer DEFAULT 4 NOT NULL;
