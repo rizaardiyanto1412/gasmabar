@@ -57,6 +57,7 @@ export default function AntrianPage() {
   }, [user, isLoading, fetchRounds]);
 
   const handleSubmit = async (e: React.FormEvent) => {
+    setIsLoading(true);
     e.preventDefault();
     if (!gameId.trim() || !user) return;
 
@@ -141,9 +142,9 @@ export default function AntrianPage() {
     return <div>Please sign in to view your game rounds.</div>;
   }
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
+//   if (isLoading) {
+//     return <div>Loading...</div>;
+//   }
 
   const renderGameList = (games: Game[]) => {
     const fastTrackGames = games.filter(game => game.isFastTrack);
@@ -180,8 +181,11 @@ export default function AntrianPage() {
               placeholder="Enter Game ID"
             />
           </div>
-          {isFastTrackEnabled && (
-            <div className="flex items-center gap-2">
+          
+          <Button type="submit">{isLoading ? 'Submitting...' : 'Submit'}</Button>
+        </div>
+        {isFastTrackEnabled && (
+            <div className="flex items-center gap-2 mt-2">
               <Checkbox
                 id="fastTrack"
                 checked={fastTrack}
@@ -190,8 +194,6 @@ export default function AntrianPage() {
               <Label htmlFor="fastTrack">Fast Track</Label>
             </div>
           )}
-          <Button type="submit">Submit</Button>
-        </div>
       </form>
 
       <div className="space-y-6">
