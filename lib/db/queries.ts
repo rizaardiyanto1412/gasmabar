@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull } from 'drizzle-orm';
+import { desc, and, eq, isNull, or } from 'drizzle-orm';
 import { db } from './drizzle';
 import { activityLogs, teamMembers, teams, users } from './schema';
 import { cookies } from 'next/headers';
@@ -126,4 +126,22 @@ export async function getTeamForUser(userId: number) {
   });
 
   return result?.teamMembers[0]?.team || null;
+}
+
+// Add this function to the existing file
+export async function getUserByUsername(username: string) {
+  console.log('getUserByUsername: Searching for user with username:', username);
+  const result = await db
+    .select()
+    .from(users)
+    .where(
+      or(
+        eq(users.name, username),
+        eq(users.email, username)
+      )
+    )
+    .limit(1);
+
+  console.log('getUserByUsername: Query result:', result);
+  return result.length > 0 ? result[0] : null;
 }
