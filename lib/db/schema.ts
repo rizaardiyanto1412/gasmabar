@@ -116,7 +116,7 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
 }));
 
 export const games = pgTable('games', {
-  id: text('id').primaryKey(),  // Change this to text type
+  id: text('id').primaryKey(),  // Changed from serial() to text()
   roundId: integer('round_id').notNull().references(() => rounds.id),
   gameId: text('game_id').notNull(),
   isFastTrack: boolean('is_fast_track').notNull().default(false),

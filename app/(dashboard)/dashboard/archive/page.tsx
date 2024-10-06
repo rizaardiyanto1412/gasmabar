@@ -7,13 +7,17 @@ import { useUser } from '@/lib/auth';
 import { getArchivedRounds, deleteArchivedRound, deleteAllArchivedRounds } from './actions';
 
 type Game = {
-  id: number;
+  id: string;  // Changed from number to string
+  createdAt: Date;
+  roundId: number;
   gameId: string;
   isFastTrack: boolean;
 };
 
 type Round = {
   id: number;
+  createdAt: Date;
+  userId: number;
   roundNumber: number;
   isCurrent: boolean;
   isArchived: boolean;
@@ -33,7 +37,7 @@ export default function ArchivePage() {
     setIsLoading(true);
     try {
       const fetchedArchivedRounds = await getArchivedRounds(user.id);
-      setArchivedRounds(fetchedArchivedRounds);
+      setArchivedRounds(fetchedArchivedRounds as Round[]);  // Type assertion
       setHasFetched(true);
     } catch (error) {
       console.error('Error fetching archived rounds:', error);

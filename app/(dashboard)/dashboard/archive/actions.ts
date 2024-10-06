@@ -1,10 +1,10 @@
 'use server';
 
 import { db } from '@/lib/db/drizzle';
-import { rounds, games } from '@/lib/db/schema';
+import { rounds, games, Round, Game } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 
-export async function getArchivedRounds(userId: number) {
+export async function getArchivedRounds(userId: number): Promise<(Round & { games: Game[] })[]> {
   const archivedRounds = await db.select().from(rounds)
     .where(and(eq(rounds.userId, userId), eq(rounds.isArchived, true)))
     .orderBy(rounds.archivedAt);
@@ -16,7 +16,7 @@ export async function getArchivedRounds(userId: number) {
         .from(games)
         .where(eq(games.roundId, round.id))
         .orderBy(games.createdAt);
-      return { ...round, games: roundGames || [] };
+      return { ...round, games: roundGames };
     })
   );
   return roundsWithGames;
