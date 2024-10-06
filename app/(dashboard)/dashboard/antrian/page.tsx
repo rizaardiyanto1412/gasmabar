@@ -9,7 +9,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useUser } from '@/lib/auth';
 import { addGameToRound, getRounds, createNewRound, updateCurrentRound, clearCurrentRound, updateRoundGames } from '@/app/(dashboard)/dashboard/antrian/actions';
 
-type Game = {
+// Define and export the Game type
+export type Game = {
   id: number;
   gameId: string;
   isFastTrack: boolean;
@@ -29,6 +30,7 @@ export default function AntrianPage() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFastTrackEnabled, setIsFastTrackEnabled] = useState(false);
 
   const fetchRounds = useCallback(async () => {
     if (!user) return;
@@ -38,6 +40,7 @@ export default function AntrianPage() {
       console.log('Fetched rounds:', fetchedRounds);
       setRounds(fetchedRounds.filter(round => !round.isCurrent));
       setCurrentRound(fetchedRounds.find(round => round.isCurrent) || null);
+      setIsFastTrackEnabled(user.fastTrackEnabled || false);
     } catch (error) {
       console.error('Error fetching rounds:', error);
     } finally {
@@ -175,14 +178,16 @@ export default function AntrianPage() {
               placeholder="Enter Game ID"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="fastTrack"
-              checked={fastTrack}
-              onCheckedChange={(checked) => setFastTrack(checked as boolean)}
-            />
-            <Label htmlFor="fastTrack">Fast Track</Label>
-          </div>
+          {isFastTrackEnabled && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="fastTrack"
+                checked={fastTrack}
+                onCheckedChange={(checked) => setFastTrack(checked as boolean)}
+              />
+              <Label htmlFor="fastTrack">Fast Track</Label>
+            </div>
+          )}
           <Button type="submit">Submit</Button>
         </div>
       </form>
@@ -208,6 +213,7 @@ export default function AntrianPage() {
 
         <div className="space-y-4">
           <h2 className="text-xl font-semibold">Round List</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {rounds.map((round) => (
             <Card key={round.id}>
               <CardHeader>
@@ -227,6 +233,7 @@ export default function AntrianPage() {
               </CardFooter>
             </Card>
           ))}
+          </div>
         </div>
       </div>
     </section>

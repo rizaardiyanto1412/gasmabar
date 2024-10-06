@@ -8,6 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useUser } from '@/lib/auth';
 import { updateAccount } from '@/app/(login)/actions';
+import { Switch } from '@/components/ui/switch'; // Add this import
+import { useState } from 'react'; // Add this import
+import { useEffect } from 'react'; // Add this import
 
 type ActionState = {
   error?: string;
@@ -21,17 +24,23 @@ export default function GeneralPage() {
     { error: '', success: '' }
   );
 
+  const [isFastTrackEnabled, setIsFastTrackEnabled] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setIsFastTrackEnabled(user.fastTrackEnabled ?? false);
+    }
+  }, [user]);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // If you call the Server Action directly, it will automatically
-    // reset the form. We don't want that here, because we want to keep the
-    // client-side values in the inputs. So instead, we use an event handler
-    // which calls the action. You must wrap direct calls with startTranstion.
-    // When you use the `action` prop it automatically handles that for you.
-    // Another option here is to persist the values to local storage. I might
-    // explore alternative options.
+    const formData = new FormData(event.currentTarget);
+    
+    // Convert the boolean to a string 'true' or 'false'
+    formData.set('fastTrackEnabled', isFastTrackEnabled.toString());
+
     startTransition(() => {
-      formAction(new FormData(event.currentTarget));
+      formAction(formData);
     });
   };
 
@@ -67,6 +76,14 @@ export default function GeneralPage() {
                 defaultValue={user?.email || ''}
                 required
               />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="fastTrackEnabled"
+                checked={isFastTrackEnabled}
+                onCheckedChange={setIsFastTrackEnabled}
+              />
+              <Label htmlFor="fastTrackEnabled">Enable Fast Track</Label>
             </div>
             {state.error && (
               <p className="text-red-500 text-sm">{state.error}</p>

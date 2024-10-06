@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "fast_track_enabled" BOOLEAN NOT NULL DEFAULT false;

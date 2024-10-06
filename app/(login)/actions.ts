@@ -302,22 +302,29 @@ export const deleteAccount = validatedActionWithUser(
 );
 
 const updateAccountSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
+  name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
+  fastTrackEnabled: z.enum(['true', 'false']).transform(val => val === 'true'),
 });
 
 export const updateAccount = validatedActionWithUser(
   updateAccountSchema,
   async (data, _, user) => {
-    const { name, email } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
+    try {
+      await db
+        .update(users)
+        .set({
+          name: data.name,
+          email: data.email,
+          fastTrackEnabled: data.fastTrackEnabled,
+        })
+        .where(eq(users.id, user.id));
 
-    await Promise.all([
-      db.update(users).set({ name, email }).where(eq(users.id, user.id)),
-      logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT),
-    ]);
-
-    return { success: 'Account updated successfully.' };
+      return { success: 'Account updated successfully' };
+    } catch (error) {
+      console.error('Error updating account:', error);
+      return { error: 'Failed to update account' };
+    }
   }
 );
 

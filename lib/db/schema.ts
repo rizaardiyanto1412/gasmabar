@@ -18,6 +18,7 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
+  fastTrackEnabled: boolean('fast_track_enabled').notNull().default(false), // Add this line
 });
 
 export const teams = pgTable('teams', {

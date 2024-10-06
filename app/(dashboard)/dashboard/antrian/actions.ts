@@ -2,7 +2,8 @@
 
 import { db } from '@/lib/db/drizzle';
 import { rounds, roundGames } from '@/lib/db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { Game } from './page'; // Import the Game type from page.tsx
 
 export async function getRounds(userId: number) {
   const allRounds = await db.select().from(rounds)

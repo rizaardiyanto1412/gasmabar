@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "fast_track_enabled" boolean DEFAULT false NOT NULL;
