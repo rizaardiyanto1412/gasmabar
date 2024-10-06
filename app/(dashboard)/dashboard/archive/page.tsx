@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/lib/auth';
-import { getArchivedRounds, deleteArchivedRound } from '@/app/(dashboard)/dashboard/antrian/actions';
+import { getArchivedRounds, deleteArchivedRound, deleteAllArchivedRounds } from './actions';
 
 type Game = {
   id: number;
@@ -26,6 +26,7 @@ export default function ArchivePage() {
   const [archivedRounds, setArchivedRounds] = useState<Round[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasFetched, setHasFetched] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const fetchArchivedRounds = useCallback(async () => {
     if (!user || hasFetched) return;
@@ -36,6 +37,7 @@ export default function ArchivePage() {
       setHasFetched(true);
     } catch (error) {
       console.error('Error fetching archived rounds:', error);
+      setMessage({ text: 'Failed to fetch archived rounds', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -50,8 +52,26 @@ export default function ArchivePage() {
     try {
       await deleteArchivedRound(user.id, roundId);
       setArchivedRounds(prevRounds => prevRounds.filter(round => round.id !== roundId));
+      setMessage({ text: 'Round deleted successfully', type: 'success' });
     } catch (error) {
       console.error('Error deleting archived round:', error);
+      setMessage({ text: 'Failed to delete round', type: 'error' });
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!user) return;
+    try {
+      const result = await deleteAllArchivedRounds(user.id);
+      if (result.success) {
+        setArchivedRounds([]);
+        setMessage({ text: result.message, type: 'success' });
+      } else {
+        setMessage({ text: result.message, type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error deleting all archived rounds:', error);
+      setMessage({ text: 'An unexpected error occurred while deleting archived rounds', type: 'error' });
     }
   };
 
@@ -65,9 +85,24 @@ export default function ArchivePage() {
 
   return (
     <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium text-gray-900 mb-6">
-        Archived Rounds
-      </h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-lg lg:text-2xl font-medium text-gray-900">
+          Archived Rounds
+        </h1>
+        <Button 
+          variant="destructive" 
+          onClick={handleDeleteAll}
+          disabled={archivedRounds.length === 0}
+        >
+          Delete All Archives
+        </Button>
+      </div>
+
+      {message && (
+        <div className={`p-4 mb-4 rounded ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          {message.text}
+        </div>
+      )}
 
       <div className="space-y-4">
         {archivedRounds.map((round) => (
