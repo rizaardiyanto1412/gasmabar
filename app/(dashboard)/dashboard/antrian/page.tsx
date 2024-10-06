@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
+import { useUser } from '@/lib/auth';
+import { getRounds, updateRoundGames, clearCurrentRound, updateCurrentRound, createNewRound } from './actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useUser } from '@/lib/auth';
-import { addGameToRound, getRounds, createNewRound, updateCurrentRound, clearCurrentRound, updateRoundGames } from '@/app/(dashboard)/dashboard/antrian/actions';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import AntrianComponent from '@/components/AntrianComponent';
 
-// Define and export the Game type
 export type Game = {
-  id: number;
+  id: number; // Change this to number
   gameId: string;
   isFastTrack: boolean;
 };
@@ -33,14 +34,20 @@ export default function AntrianPage() {
   const [isFastTrackEnabled, setIsFastTrackEnabled] = useState(false);
   const [gamesPerRound, setGamesPerRound] = useState(4);
 
-  const fetchRounds = useCallback(async () => {
+  const fetchRounds = async () => {
     if (!user) return;
     setIsLoading(true);
     try {
       const fetchedRounds = await getRounds(user.id);
-      console.log('Fetched rounds:', fetchedRounds);
-      setRounds(fetchedRounds.filter(round => !round.isCurrent));
-      setCurrentRound(fetchedRounds.find(round => round.isCurrent) || null);
+      const formattedRounds = fetchedRounds.map(round => ({
+        ...round,
+        games: round.games.map(game => ({
+          ...game,
+          id: Number(game.id) // Ensure id is a number
+        }))
+      }));
+      setRounds(formattedRounds.filter(round => !round.isCurrent));
+      setCurrentRound(formattedRounds.find(round => round.isCurrent) || null);
       setIsFastTrackEnabled(user.fastTrackEnabled || false);
       setGamesPerRound(user.gamesPerRound || 4);
     } catch (error) {
@@ -48,13 +55,13 @@ export default function AntrianPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  };
 
   useEffect(() => {
     if (user && isLoading) {
       fetchRounds();
     }
-  }, [user, isLoading, fetchRounds]);
+  }, [user, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     setIsLoading(true);
@@ -122,47 +129,92 @@ export default function AntrianPage() {
       setFastTrack(false);
       await fetchRounds(); // Fetch the updated rounds from the server
     } catch (error) {
-      console.error('Error submitting game:', error);
+      console.error('Error clearing current round:', error);
+    }
+  };
+
+  const handleClearCurrentRound = async () => {
+    if (!user || !currentRound) return;
+    try {
+      await clearCurrentRound(user.id);
+      await fetchRounds();
+    } catch (error) {
+      console.error('Error clearing current round:', error);
     }
   };
 
   const moveToCurrentRound = async (roundId: number) => {
     if (!user) return;
-    await updateCurrentRound(roundId);
-    setIsLoading(true);
+    try {
+      await updateCurrentRound(roundId);
+      await fetchRounds();
+    } catch (error) {
+      console.error('Error moving round to current:', error);
+    }
   };
 
-  const handleClearCurrentRound = async () => {
-    if (!user || !currentRound) return;
-    await clearCurrentRound(user.id);
-    setIsLoading(true);
+  const onDragEnd = async (result: DropResult) => {
+    const { source, destination } = result;
+
+    if (!destination) return;
+
+    const sourceRoundId = parseInt(source.droppableId);
+    const destRoundId = parseInt(destination.droppableId);
+
+    let updatedRounds = [...rounds];
+    if (currentRound) {
+      updatedRounds = [currentRound, ...updatedRounds];
+    }
+
+    const sourceRound = updatedRounds.find(round => round.id === sourceRoundId);
+    const destRound = updatedRounds.find(round => round.id === destRoundId);
+
+    if (!sourceRound || !destRound) return;
+
+    const [reorderedItem] = sourceRound.games.splice(source.index, 1);
+    destRound.games.splice(destination.index, 0, reorderedItem);
+
+    setRounds(updatedRounds.filter(round => !round.isCurrent));
+    if (currentRound) {
+      setCurrentRound(updatedRounds.find(round => round.isCurrent) || null);
+    }
+
+    // Update the database
+    if (user) {
+      await updateRoundGames(user.id, sourceRound.id, sourceRound.games);
+      if (sourceRoundId !== destRoundId) {
+        await updateRoundGames(user.id, destRound.id, destRound.games);
+      }
+    }
   };
+
+  const renderGameList = (round: Round) => (
+    <Droppable droppableId={round.id.toString()}>
+      {(provided) => (
+        <div {...provided.droppableProps} ref={provided.innerRef}>
+          {round.games.map((game, index) => (
+            <Draggable key={game.id} draggableId={game.id.toString()} index={index}>
+              {(provided) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.draggableProps}
+                  {...provided.dragHandleProps}
+                  className={`mb-2 p-2 rounded ${game.isFastTrack ? 'bg-red-100' : 'bg-gray-100'}`}
+                >
+                  {game.gameId} {game.isFastTrack && '(Fast Track)'}
+                </div>
+              )}
+            </Draggable>
+          ))}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
 
   if (!user) {
     return <div>Please sign in to view your game rounds.</div>;
   }
-
-//   if (isLoading) {
-//     return <div>Loading...</div>;
-//   }
-
-  const renderGameList = (games: Game[]) => {
-    const fastTrackGames = games.filter(game => game.isFastTrack);
-    const regularGames = games.filter(game => !game.isFastTrack);
-
-    return (
-      <div>
-        {fastTrackGames.map((game, index) => (
-          <div key={index} className="text-red-600 font-bold">
-            {game.gameId} (Fast Track)
-          </div>
-        ))}
-        {regularGames.map((game, index) => (
-          <div key={index}>{game.gameId}</div>
-        ))}
-      </div>
-    );
-  };
 
   return (
     <section className="flex-1 p-4 lg:p-8">
@@ -196,50 +248,52 @@ export default function AntrianPage() {
           )}
       </form>
 
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Current Round</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {currentRound && currentRound.games && currentRound.games.length > 0 ? (
-              renderGameList(currentRound.games)
-            ) : (
-              <p>No games in the current round</p>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleClearCurrentRound} variant="destructive">
-              Clear Current Round
-            </Button>
-          </CardFooter>
-        </Card>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Round</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {currentRound && currentRound.games && currentRound.games.length > 0 ? (
+                renderGameList(currentRound)
+              ) : (
+                <p>No games in the current round</p>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleClearCurrentRound} variant="destructive">
+                Clear Current Round
+              </Button>
+            </CardFooter>
+          </Card>
 
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Round List</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rounds.map((round) => (
-            <Card key={round.id}>
-              <CardHeader>
-                <CardTitle>Round {round.roundNumber}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {round.games && round.games.length > 0 ? (
-                  renderGameList(round.games)
-                ) : (
-                  <p>No games in this round</p>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Button onClick={() => moveToCurrentRound(round.id)}>
-                  Move to Current Round
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">Round List</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {rounds.map((round) => (
+                <Card key={round.id}>
+                  <CardHeader>
+                    <CardTitle>Round {round.roundNumber}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {round.games && round.games.length > 0 ? (
+                      renderGameList(round)
+                    ) : (
+                      <p>No games in this round</p>
+                    )}
+                  </CardContent>
+                  <CardFooter>
+                    <Button onClick={() => moveToCurrentRound(round.id)}>
+                      Move to Current Round
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </DragDropContext>
     </section>
   );
 }

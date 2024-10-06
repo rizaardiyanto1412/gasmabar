@@ -121,21 +121,23 @@ export async function deleteArchivedRound(userId: number, roundId: number) {
 
 export async function updateRoundGames(userId: number, roundId: number, games: Game[]) {
   try {
-    // First, delete all existing games for this round
-    await db.delete(roundGames).where(eq(roundGames.roundId, roundId));
+    await db.transaction(async (tx) => {
+      // Delete existing games for the round
+      await tx.delete(roundGames).where(eq(roundGames.roundId, roundId));
 
-    // Then, insert the new games
-    for (const game of games) {
-      await db.insert(roundGames).values({
-        roundId,
-        gameId: game.gameId,
-        isFastTrack: game.isFastTrack,
-      });
-    }
-
-    console.log(`Updated games for round ${roundId}`);
+      // Insert new games
+      for (const game of games) {
+        await tx.insert(roundGames).values({
+          roundId,
+          gameId: game.gameId,
+          isFastTrack: game.isFastTrack,
+        });
+      }
+    });
   } catch (error) {
     console.error('Error updating round games:', error);
     throw error;
   }
 }
+
+export { updateRoundGames };
