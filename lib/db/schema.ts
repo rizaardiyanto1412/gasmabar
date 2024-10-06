@@ -116,8 +116,9 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
 }));
 
 export const games = pgTable('games', {
-  id: serial('id').primaryKey(),
-  gameId: varchar('game_id', { length: 255 }).notNull(),
+  id: text('id').primaryKey(),  // Change this to text type
+  roundId: integer('round_id').notNull().references(() => rounds.id),
+  gameId: text('game_id').notNull(),
   isFastTrack: boolean('is_fast_track').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -133,11 +134,11 @@ export const rounds = pgTable('rounds', {
 });
 
 export const roundGames = pgTable('round_games', {
-  id: serial('id').primaryKey(),
+  id: text('id').primaryKey(),
   roundId: integer('round_id').notNull().references(() => rounds.id),
-  gameId: varchar('game_id', { length: 255 }).notNull(),
+  gameId: text('game_id').notNull(),
   isFastTrack: boolean('is_fast_track').notNull().default(false),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
 });
 
 export type User = typeof users.$inferSelect & {

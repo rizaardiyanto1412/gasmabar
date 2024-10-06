@@ -10,9 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import AntrianComponent from '@/components/AntrianComponent';
+import { v4 as uuidv4 } from 'uuid';
 
 export type Game = {
-  id: number; // Change this to number
+  id?: string; // Make id optional
   gameId: string;
   isFastTrack: boolean;
 };
@@ -43,7 +44,7 @@ export default function AntrianPage() {
         ...round,
         games: round.games.map(game => ({
           ...game,
-          id: Number(game.id) // Ensure id is a number
+          id: game.id // No need to convert to number anymore
         }))
       }));
       setRounds(formattedRounds.filter(round => !round.isCurrent));
@@ -64,72 +65,72 @@ export default function AntrianPage() {
   }, [user, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    setIsLoading(true);
     e.preventDefault();
     if (!gameId.trim() || !user) return;
 
+    const newGame: Game = { id: uuidv4(), gameId, isFastTrack: fastTrack };
+
     try {
+      setIsLoading(true);
+
+      // Optimistic update
       let updatedRounds = [...rounds];
-      const newGame: Game = { id: Date.now(), gameId, isFastTrack: fastTrack };
+      let updatedCurrentRound = currentRound ? { ...currentRound } : null;
 
       if (fastTrack) {
-        // For Fast Track items
-        let targetRound = updatedRounds[0];
+        // Fast Track logic
+        let targetRound = updatedRounds.find(round => round.games.length < gamesPerRound) || updatedCurrentRound;
         if (!targetRound) {
-          // Create a new round if there are no rounds
-          const newRound = await createNewRound(user.id, 1);
-          targetRound = { ...newRound, games: [] };
+          targetRound = { id: -1, roundNumber: updatedRounds.length + 1, isCurrent: false, games: [] };
           updatedRounds.push(targetRound);
         }
-
-        // Find the position to insert the new Fast Track game
         const lastFastTrackIndex = targetRound.games.findLastIndex(game => game.isFastTrack);
-        const insertIndex = lastFastTrackIndex === -1 ? 0 : lastFastTrackIndex + 1;
-        
-        // Insert the new Fast Track game
-        targetRound.games.splice(insertIndex, 0, newGame);
-
-        // Redistribute games if necessary
-        while (targetRound.games.length > gamesPerRound) {
-          const lastGame = targetRound.games.pop()!;
-          if (!lastGame.isFastTrack) {
-            let nextRound = updatedRounds[updatedRounds.indexOf(targetRound) + 1];
-            if (!nextRound) {
-              // Create a new round for the moved game
-              const newRound = await createNewRound(user.id, updatedRounds.length + 1);
-              nextRound = { ...newRound, games: [] };
-              updatedRounds.push(nextRound);
-            }
-            nextRound.games.unshift(lastGame);
-          } else {
-            // If the last game is also Fast Track, put it back and stop redistribution
-            targetRound.games.push(lastGame);
-            break;
-          }
+        if (lastFastTrackIndex === -1) {
+          targetRound.games.unshift(newGame);
+        } else {
+          targetRound.games.splice(lastFastTrackIndex + 1, 0, newGame);
         }
       } else {
-        // For non-Fast Track items, add to the last round or create a new one if full
-        let targetRound = updatedRounds[updatedRounds.length - 1];
+        // Non-Fast Track logic
+        let targetRound = updatedRounds[updatedRounds.length - 1] || updatedCurrentRound;
         if (!targetRound || targetRound.games.length >= gamesPerRound) {
-          const newRound = await createNewRound(user.id, updatedRounds.length + 1);
-          targetRound = { ...newRound, games: [] };
+          targetRound = { id: -1, roundNumber: updatedRounds.length + 1, isCurrent: false, games: [] };
           updatedRounds.push(targetRound);
         }
         targetRound.games.push(newGame);
       }
 
-      // Update the rounds in the database
-      for (const round of updatedRounds) {
-        await updateRoundGames(user.id, round.id, round.games);
-      }
+      // Consolidate rounds
+      updatedRounds = consolidateRounds(updatedRounds, gamesPerRound);
 
-      console.log('Updated rounds:', updatedRounds);
-      setRounds(updatedRounds);
+      // Update state optimistically
+      setRounds(updatedRounds.filter(round => !round.isCurrent));
+      setCurrentRound(updatedCurrentRound || updatedRounds.find(round => round.isCurrent) || null);
+
+      // Clear input fields
       setGameId('');
       setFastTrack(false);
-      await fetchRounds(); // Fetch the updated rounds from the server
+
+      // Perform the actual API updates
+      const updatedRoundsFromServer = await Promise.all(
+        updatedRounds.map(async (round) => {
+          if (round.id < 0) {
+            return await createNewRound(user.id, round.roundNumber, round.games);
+          } else {
+            return await updateRoundGames(user.id, round.id, round.games);
+          }
+        })
+      );
+
+      // Update state with server response
+      setRounds(updatedRoundsFromServer.filter(round => !round.isCurrent));
+      setCurrentRound(updatedRoundsFromServer.find(round => round.isCurrent) || null);
+
     } catch (error) {
-      console.error('Error clearing current round:', error);
+      console.error('Error updating rounds:', error);
+      await fetchRounds();
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -193,7 +194,7 @@ export default function AntrianPage() {
       {(provided) => (
         <div {...provided.droppableProps} ref={provided.innerRef}>
           {round.games.map((game, index) => (
-            <Draggable key={game.id} draggableId={game.id.toString()} index={index}>
+            <Draggable key={game.id} draggableId={game.id || `temp-${index}`} index={index}>
               {(provided) => (
                 <div
                   ref={provided.innerRef}
@@ -297,3 +298,55 @@ export default function AntrianPage() {
     </section>
   );
 }
+
+// Add this new function to consolidate rounds
+const consolidateRounds = (rounds: Round[], gamesPerRound: number): Round[] => {
+  if (rounds.length === 0) return [];
+
+  let consolidatedRounds: Round[] = [];
+  let allGames: Game[] = rounds.flatMap(round => round.games);
+
+  // Separate fast track and regular games
+  const fastTrackGames = allGames.filter(game => game.isFastTrack);
+  const regularGames = allGames.filter(game => !game.isFastTrack);
+
+  let currentRound: Round | null = null;
+
+  // Distribute fast track games
+  fastTrackGames.forEach(game => {
+    if (!currentRound || currentRound.games.length >= gamesPerRound) {
+      currentRound = {
+        id: consolidatedRounds.length > 0 ? -consolidatedRounds.length - 1 : rounds[0].id,
+        roundNumber: consolidatedRounds.length + 1,
+        isCurrent: false,
+        games: []
+      };
+      consolidatedRounds.push(currentRound);
+    }
+    currentRound.games.push(game);
+  });
+
+  // Distribute regular games
+  regularGames.forEach(game => {
+    if (!currentRound || currentRound.games.length >= gamesPerRound) {
+      currentRound = {
+        id: consolidatedRounds.length > 0 ? -consolidatedRounds.length - 1 : rounds[0].id,
+        roundNumber: consolidatedRounds.length + 1,
+        isCurrent: false,
+        games: []
+      };
+      consolidatedRounds.push(currentRound);
+    }
+    currentRound.games.push(game);
+  });
+
+  // Preserve existing round IDs where possible
+  return consolidatedRounds.map((round, index) => {
+    const existingRound = rounds.find(r => r.roundNumber === index + 1);
+    return {
+      ...round,
+      id: existingRound ? existingRound.id : round.id,
+      roundNumber: index + 1
+    };
+  });
+};

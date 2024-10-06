@@ -1,25 +1,38 @@
 'use server';
 
 import { db } from '@/lib/db/drizzle';
-import { rounds, roundGames } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
-import { Game } from './page'; // Import the Game type from page.tsx
+import { rounds, games } from '@/lib/db/schema';
+import { eq, and, notInArray } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
+
+export type Game = {
+  id: string;
+  gameId: string;
+  isFastTrack: boolean;
+};
+
+export type Round = {
+  id: number;
+  roundNumber: number;
+  isCurrent: boolean;
+  games: Game[];
+};
 
 export async function getRounds(userId: number) {
   const allRounds = await db.select().from(rounds)
     .where(and(
       eq(rounds.userId, userId),
-      eq(rounds.isArchived, false)  // Add this condition
+      eq(rounds.isArchived, false)
     ))
     .orderBy(rounds.roundNumber);
   const roundsWithGames = await Promise.all(
     allRounds.map(async (round) => {
-      const games = await db
+      const roundGames = await db
         .select()
-        .from(roundGames)
-        .where(eq(roundGames.roundId, round.id))
-        .orderBy(roundGames.createdAt);
-      return { ...round, games: games || [] };
+        .from(games)
+        .where(eq(games.roundId, round.id))
+        .orderBy(games.createdAt);
+      return { ...round, games: roundGames || [] };
     })
   );
   return roundsWithGames;
@@ -35,19 +48,50 @@ export async function addGameToRound(userId: number, roundId: number, gameId: st
     throw new Error("Round not found or doesn't belong to the user");
   }
 
-  await db.insert(roundGames).values({
+  await db.insert(games).values({
+    id: uuidv4(), // This is now correct as id is a string
     roundId,
     gameId,
     isFastTrack,
   });
 }
 
-export async function createNewRound(userId: number, roundNumber: number) {
-  const [newRound] = await db
-    .insert(rounds)
-    .values({ userId, roundNumber })
-    .returning();
-  return newRound;
+// Update the createNewRound function to accept initial games
+export async function createNewRound(userId: number, roundNumber: number, initialGames: Omit<Game, 'id'>[] = []): Promise<Round> {
+  const [newRound] = await db.insert(rounds).values({
+    userId,
+    roundNumber,
+    isCurrent: false,
+  }).returning();
+
+  if (initialGames.length > 0) {
+    await db.insert(games).values(
+      initialGames.map(game => ({
+        id: uuidv4(),
+        roundId: newRound.id,
+        gameId: game.gameId,
+        isFastTrack: game.isFastTrack,
+      }))
+    );
+  }
+
+  const roundGames = initialGames.map(game => ({
+    id: uuidv4(),
+    gameId: game.gameId,
+    isFastTrack: game.isFastTrack
+  }));
+
+  return { ...newRound, games: roundGames };
+}
+
+async function getRound(roundId: number): Promise<Round> {
+  const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
+  const roundGames = await db.select().from(games).where(eq(games.roundId, roundId));
+  return { ...round, games: roundGames.map(game => ({
+    id: game.id,
+    gameId: game.gameId,
+    isFastTrack: game.isFastTrack
+  })) };
 }
 
 export async function updateCurrentRound(roundId: number) {
@@ -88,12 +132,12 @@ export async function getArchivedRounds(userId: number) {
 
   const roundsWithGames = await Promise.all(
     archivedRounds.map(async (round) => {
-      const games = await db
+      const roundGames = await db
         .select()
-        .from(roundGames)
-        .where(eq(roundGames.roundId, round.id))
-        .orderBy(roundGames.createdAt);
-      return { ...round, games: games || [] };
+        .from(games)
+        .where(eq(games.roundId, round.id))
+        .orderBy(games.createdAt);
+      return { ...round, games: roundGames || [] };
     })
   );
   return roundsWithGames;
@@ -113,31 +157,37 @@ export async function deleteArchivedRound(userId: number, roundId: number) {
   }
 
   // Delete associated games first
-  await db.delete(roundGames).where(eq(roundGames.roundId, roundId));
+  await db.delete(games).where(eq(games.roundId, roundId));
 
   // Then delete the round itself
   await db.delete(rounds).where(eq(rounds.id, roundId));
 }
 
-export async function updateRoundGames(userId: number, roundId: number, games: Game[]) {
-  try {
-    await db.transaction(async (tx) => {
-      // Delete existing games for the round
-      await tx.delete(roundGames).where(eq(roundGames.roundId, roundId));
+// Update the updateRoundGames function to handle potential new games
+export async function updateRoundGames(userId: number, roundId: number, updatedGames: Omit<Game, 'id'>[]): Promise<Round> {
+  // First, check if the round exists and belongs to the user
+  const existingRound = await db.select().from(rounds)
+    .where(and(eq(rounds.id, roundId), eq(rounds.userId, userId)))
+    .limit(1);
 
-      // Insert new games
-      for (const game of games) {
-        await tx.insert(roundGames).values({
-          roundId,
-          gameId: game.gameId,
-          isFastTrack: game.isFastTrack,
-        });
-      }
-    });
-  } catch (error) {
-    console.error('Error updating round games:', error);
-    throw error;
+  if (existingRound.length === 0) {
+    throw new Error("Round not found or doesn't belong to the user");
   }
-}
 
-export { updateRoundGames };
+  // Delete all existing games for this round
+  await db.delete(games).where(eq(games.roundId, roundId));
+
+  // Insert all games as new entries
+  if (updatedGames.length > 0) {
+    await db.insert(games).values(
+      updatedGames.map(game => ({
+        id: uuidv4(),
+        roundId,
+        gameId: game.gameId,
+        isFastTrack: game.isFastTrack,
+      }))
+    );
+  }
+
+  return getRound(roundId);
+}

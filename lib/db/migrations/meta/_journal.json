@@ -50,6 +50,20 @@
       "when": 1728189047364,
       "tag": "0006_rare_namor",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1728195685860,
+      "tag": "0007_shiny_ken_ellis",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1728207250359,
+      "tag": "0008_unique_meltdown",
+      "breakpoints": true
     }
   ]
 }
