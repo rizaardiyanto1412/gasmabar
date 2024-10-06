@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   integer,
+  boolean
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -112,6 +113,31 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
 }));
 
+export const games = pgTable('games', {
+  id: serial('id').primaryKey(),
+  gameId: varchar('game_id', { length: 255 }).notNull(),
+  isFastTrack: boolean('is_fast_track').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const rounds = pgTable('rounds', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  roundNumber: integer('round_number').notNull(),
+  isCurrent: boolean('is_current').notNull().default(false),
+  isArchived: boolean('is_archived').notNull().default(false),
+  archivedAt: timestamp('archived_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const roundGames = pgTable('round_games', {
+  id: serial('id').primaryKey(),
+  roundId: integer('round_id').notNull().references(() => rounds.id),
+  gameId: varchar('game_id', { length: 255 }).notNull(),
+  isFastTrack: boolean('is_fast_track').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Team = typeof teams.$inferSelect;
@@ -140,3 +166,11 @@ export enum ActivityType {
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
 }
+
+export type Game = typeof games.$inferSelect;
+export type NewGame = typeof games.$inferInsert;
+
+export type Round = typeof rounds.$inferSelect;
+export type NewRound = typeof rounds.$inferInsert;
+export type RoundGame = typeof roundGames.$inferSelect;
+export type NewRoundGame = typeof roundGames.$inferInsert;

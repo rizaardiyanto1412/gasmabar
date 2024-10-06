@@ -8,6 +8,34 @@
       "when": 1726443359662,
       "tag": "0000_soft_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1728181631045,
+      "tag": "0001_wonderful_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1728182018240,
+      "tag": "0002_burly_gunslinger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1728182332855,
+      "tag": "0003_oval_warstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1728183099893,
+      "tag": "0004_right_arclight",
+      "breakpoints": true
     }
   ]
 }
