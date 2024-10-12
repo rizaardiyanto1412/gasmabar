@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useUser } from '@/lib/auth';
 import { getRounds, updateRoundGames, clearCurrentRound, updateCurrentRound, createNewRound } from './actions';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import AntrianComponent from '@/components/AntrianComponent';
 import { v4 as uuidv4 } from 'uuid';
+import { Toaster, toast } from 'react-hot-toast';
 
 export type Game = {
   id?: string; // Make id optional
@@ -25,18 +26,17 @@ type Round = {
   games: Game[];
 };
 
-export default function AntrianPage() {
-  const { user } = useUser();
-  const [gameId, setGameId] = useState('');
-  const [fastTrack, setFastTrack] = useState(false);
+// Custom hook for fetching rounds
+const useFetchRounds = (user: any) => {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFastTrackEnabled, setIsFastTrackEnabled] = useState(false);
   const [gamesPerRound, setGamesPerRound] = useState(4);
+  const fetchedRef = useRef(false);
 
-  const fetchRounds = async () => {
-    if (!user) return;
+  const fetchRounds = useCallback(async () => {
+    if (!user || fetchedRef.current) return;
     setIsLoading(true);
     try {
       const fetchedRounds = await getRounds(user.id);
@@ -44,74 +44,143 @@ export default function AntrianPage() {
         ...round,
         games: round.games.map(game => ({
           ...game,
-          id: game.id // No need to convert to number anymore
+          id: game.id
         }))
       }));
       setRounds(formattedRounds.filter(round => !round.isCurrent));
       setCurrentRound(formattedRounds.find(round => round.isCurrent) || null);
       setIsFastTrackEnabled(user.fastTrackEnabled || false);
       setGamesPerRound(user.gamesPerRound || 4);
+      fetchedRef.current = true;
     } catch (error) {
       console.error('Error fetching rounds:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
-    if (user && isLoading) {
+    if (user && !fetchedRef.current) {
       fetchRounds();
     }
-  }, [user, isLoading]);
+  }, [user, fetchRounds]);
+
+  const refetch = useCallback(() => {
+    fetchedRef.current = false;
+    fetchRounds();
+  }, [fetchRounds]);
+
+  return { rounds, setRounds, currentRound, setCurrentRound, isLoading, isFastTrackEnabled, gamesPerRound, refetch };
+};
+
+export default function AntrianPage() {
+  const { user } = useUser();
+  const [gameIds, setGameIds] = useState('');
+  const [gameNumber, setGameNumber] = useState(1);
+  const [fastTrack, setFastTrack] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { 
+    rounds, setRounds, currentRound, setCurrentRound, 
+    isLoading, isFastTrackEnabled, gamesPerRound, refetch 
+  } = useFetchRounds(user);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!gameId.trim() || !user) return;
+    if (!gameIds.trim() || !user) return;
 
-    const newGame: Game = { id: uuidv4(), gameId, isFastTrack: fastTrack };
+    const gameIdList = gameIds.split('\n').filter(id => id.trim() !== '');
 
     try {
-      setIsLoading(true);
+      setIsSubmitting(true);
 
       // Optimistic update
       let updatedRounds = [...rounds];
       let updatedCurrentRound = currentRound ? { ...currentRound } : null;
 
-      if (fastTrack) {
-        // Fast Track logic
-        let targetRound = updatedRounds.find(round => round.games.length < gamesPerRound) || updatedCurrentRound;
-        if (!targetRound) {
-          targetRound = { id: -1, roundNumber: updatedRounds.length + 1, isCurrent: false, games: [] };
-          updatedRounds.push(targetRound);
-        }
-        const lastFastTrackIndex = targetRound.games.findLastIndex(game => game.isFastTrack);
-        if (lastFastTrackIndex === -1) {
-          targetRound.games.unshift(newGame);
-        } else {
-          targetRound.games.splice(lastFastTrackIndex + 1, 0, newGame);
-        }
-      } else {
-        // Non-Fast Track logic
-        let targetRound = updatedRounds[updatedRounds.length - 1] || updatedCurrentRound;
-        if (!targetRound || targetRound.games.length >= gamesPerRound) {
-          targetRound = { id: -1, roundNumber: updatedRounds.length + 1, isCurrent: false, games: [] };
-          updatedRounds.push(targetRound);
-        }
-        targetRound.games.push(newGame);
-      }
+      // **Sort allRounds by roundNumber ascendingly to prioritize earlier rounds**
+      let allRounds: Round[] = updatedCurrentRound ? [updatedCurrentRound, ...updatedRounds] : [...updatedRounds];
+      allRounds.sort((a, b) => a.roundNumber - b.roundNumber);
 
-      // Consolidate rounds
-      updatedRounds = consolidateRounds(updatedRounds, gamesPerRound);
+      console.log('Before processing:', { allRounds });
 
-      // Update state optimistically
+      // **Function to add games to rounds with Fast Track prioritization**
+      // **Ensures each copy is added to a separate round**
+      const addGamesToRounds = async (games: string[], isFastTrack: boolean) => {
+        for (const gameId of games) {
+          console.log(`Processing gameId: ${gameId}`);
+          for (let i = 0; i < gameNumber; i++) {
+            console.log(`  Iteration ${i + 1} of ${gameNumber}`);
+
+            let targetRound: Round | null = null;
+
+            if (isFastTrack) {
+              // **Find the first round with available slots**
+              targetRound = allRounds.find(
+                round => round.games.length < gamesPerRound
+              ) || null;
+
+              if (!targetRound) {
+                // **Create a new Fast Track round if no existing round has space**
+                const newRoundNumber = allRounds.length + 1;
+                targetRound = {
+                  id: -updatedRounds.length - 1, // Negative ID for new rounds
+                  roundNumber: newRoundNumber,
+                  isCurrent: false,
+                  games: []
+                };
+                updatedRounds.push(targetRound);
+                allRounds.push(targetRound);
+                console.log(`  Created new Fast Track Round ${targetRound.roundNumber}`);
+              } else {
+                console.log(`  Adding to existing Round ${targetRound.roundNumber}`);
+              }
+            } else {
+              // **Regular Game Logic**
+              // Find the first round that does not already have a copy of gameId and has space
+              targetRound = allRounds.find(
+                round => round.games.length < gamesPerRound && !round.games.some(g => g.gameId === gameId)
+              ) || null;
+
+              if (!targetRound) {
+                // **Create a new round if no suitable existing round is found**
+                const newRoundNumber = allRounds.length + 1;
+                targetRound = {
+                  id: -updatedRounds.length - 1, // Negative ID for new rounds
+                  roundNumber: newRoundNumber,
+                  isCurrent: false,
+                  games: []
+                };
+                updatedRounds.push(targetRound);
+                allRounds.push(targetRound);
+                console.log(`  Created new Round ${targetRound.roundNumber}`);
+              } else {
+                console.log(`  Adding to existing Round ${targetRound.roundNumber}`);
+              }
+            }
+
+            // **Add the game to the target round with Fast Track flag**
+            targetRound.games.push({ id: uuidv4(), gameId: gameId.trim(), isFastTrack });
+            console.log(`  Added game ${gameId} to Round ${targetRound.roundNumber}`);
+          }
+        }
+      };
+
+      // **Add Fast Track Games First**
+      await addGamesToRounds(gameIdList, fastTrack);
+
+      console.log('After processing all games:', { allRounds });
+
+      // **Update state optimistically**
       setRounds(updatedRounds.filter(round => !round.isCurrent));
-      setCurrentRound(updatedCurrentRound || updatedRounds.find(round => round.isCurrent) || null);
+      setCurrentRound(allRounds.find(round => round.isCurrent) || null);
 
-      // Clear input fields
-      setGameId('');
+      // **Clear input fields**
+      setGameIds('');
       setFastTrack(false);
+      setGameNumber(1);
 
-      // Perform the actual API updates
+      // **Perform the actual API updates**
       const updatedRoundsFromServer = await Promise.all(
         updatedRounds.map(async (round) => {
           if (round.id < 0) {
@@ -122,15 +191,32 @@ export default function AntrianPage() {
         })
       );
 
-      // Update state with server response
-      setRounds(updatedRoundsFromServer.filter(round => !round.isCurrent));
-      setCurrentRound(updatedRoundsFromServer.find(round => round.isCurrent) || null);
+      console.log('Server response:', updatedRoundsFromServer.map(r => ({ roundNumber: r.roundNumber, games: r.games.length })));
+
+      // **Update state with server response only if different from optimistic update**
+      const serverRounds = updatedRoundsFromServer.filter(round => !round.isCurrent);
+      const serverCurrentRound = updatedRoundsFromServer.find(round => round.isCurrent) || null;
+
+      if (JSON.stringify(serverRounds) !== JSON.stringify(updatedRounds)) {
+        setRounds(serverRounds);
+      }
+      if (JSON.stringify(serverCurrentRound) !== JSON.stringify(updatedCurrentRound)) {
+        setCurrentRound(serverCurrentRound);
+      }
+
+      // After server updates
+      refetch(); // Use refetch instead of fetchRounds
+
+      // Add this toast notification after successful submission
+      toast.success('Games added successfully!');
 
     } catch (error) {
       console.error('Error updating rounds:', error);
-      await fetchRounds();
+      // Add this toast notification for errors
+      toast.error('Failed to add games. Please try again.');
+      refetch(); // Use refetch here as well
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -138,9 +224,13 @@ export default function AntrianPage() {
     if (!user || !currentRound) return;
     try {
       await clearCurrentRound(user.id);
-      await fetchRounds();
+      refetch(); // Use refetch here
+      // Add this toast notification after clearing the current round
+      toast.success('Current round cleared successfully!');
     } catch (error) {
       console.error('Error clearing current round:', error);
+      // Add this toast notification for errors
+      toast.error('Failed to clear current round. Please try again.');
     }
   };
 
@@ -148,9 +238,13 @@ export default function AntrianPage() {
     if (!user) return;
     try {
       await updateCurrentRound(roundId);
-      await fetchRounds();
+      refetch(); // Use refetch here
+      // Add this toast notification after moving a round to current
+      toast.success('Round moved to current successfully!');
     } catch (error) {
       console.error('Error moving round to current:', error);
+      // Add this toast notification for errors
+      toast.error('Failed to move round to current. Please try again.');
     }
   };
 
@@ -193,20 +287,27 @@ export default function AntrianPage() {
     <Droppable droppableId={round.id.toString()}>
       {(provided) => (
         <div {...provided.droppableProps} ref={provided.innerRef}>
-          {round.games.map((game, index) => (
-            <Draggable key={game.id} draggableId={game.id || `temp-${index}`} index={index}>
-              {(provided) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  {...provided.dragHandleProps}
-                  className={`mb-2 p-2 rounded ${game.isFastTrack ? 'bg-red-100' : 'bg-gray-100'}`}
-                >
-                  {game.gameId} {game.isFastTrack && '(Fast Track)'}
-                </div>
-              )}
-            </Draggable>
-          ))}
+          {round.games
+            .slice() // Create a shallow copy to avoid mutating state
+            .sort((a, b) => {
+              if (a.isFastTrack && !b.isFastTrack) return -1; // a comes before b
+              if (!a.isFastTrack && b.isFastTrack) return 1;  // b comes before a
+              return 0; // no change
+            })
+            .map((game, index) => (
+              <Draggable key={game.id} draggableId={game.id || `temp-${index}`} index={index}>
+                {(provided) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    {...provided.dragHandleProps}
+                    className={`mb-2 p-2 rounded ${game.isFastTrack ? 'bg-red-100' : 'bg-gray-100'}`}
+                  >
+                    {game.gameId} {game.isFastTrack && '(Fast Track)'}
+                  </div>
+                )}
+              </Draggable>
+            ))}
           {provided.placeholder}
         </div>
       )}
@@ -219,34 +320,46 @@ export default function AntrianPage() {
 
   return (
     <section className="flex-1 p-4 lg:p-8">
+      <Toaster position="top-right" />
       <h1 className="text-lg lg:text-2xl font-medium text-gray-900 mb-6">
         Antrian
       </h1>
 
       <form onSubmit={handleSubmit} className="mb-8">
-        <div className="flex items-end gap-4">
-          <div className="flex-1">
-            <Label htmlFor="gameId">Game ID</Label>
-            <Input
-              id="gameId"
-              value={gameId}
-              onChange={(e) => setGameId(e.target.value)}
-              placeholder="Enter Game ID"
+        <Label htmlFor="gameIds">Game IDs (one per line)</Label>
+        <div className="flex items-end gap-4 mb-2 w-full">
+          <div className="flex w-full gap-2">
+            <textarea
+              id="gameIds"
+              value={gameIds}
+              onChange={(e) => setGameIds(e.target.value)}
+              placeholder="Enter Game IDs (one per line)"
+              className="w-full h-10 p-2 border rounded"
             />
+            <Input
+              id="gameNumber"
+              type="number"
+              min="1"
+              max="10"
+              value={gameNumber}
+              onChange={(e) => setGameNumber(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+              className="w-20"
+            />
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Submitting...' : 'Submit'}
+            </Button>
           </div>
-          
-          <Button type="submit">{isLoading ? 'Submitting...' : 'Submit'}</Button>
         </div>
         {isFastTrackEnabled && (
-            <div className="flex items-center gap-2 mt-2">
-              <Checkbox
-                id="fastTrack"
-                checked={fastTrack}
-                onCheckedChange={(checked) => setFastTrack(checked as boolean)}
-              />
-              <Label htmlFor="fastTrack">Fast Track</Label>
-            </div>
-          )}
+          <div className="flex items-center gap-2 mt-2">
+            <Checkbox
+              id="fastTrack"
+              checked={fastTrack}
+              onCheckedChange={(checked) => setFastTrack(checked as boolean)}
+            />
+            <Label htmlFor="fastTrack">Fast Track</Label>
+          </div>
+        )}
       </form>
 
       <DragDropContext onDragEnd={onDragEnd}>
