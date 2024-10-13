@@ -29,7 +29,6 @@ Fun fact: the majority of the UI for this application was built with [v0](https:
 - Email/password authentication with JWTs stored to cookies
 - Global middleware to protect logged-in routes
 - Local middleware to protect Server Actions or validate Zod schemas
-- Activity logging system for any user events
 
 ## Tech Stack
 

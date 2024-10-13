@@ -1,0 +1,10 @@
+1. Do not alter existing code unless explicitly instructed.
+2. Only add new code if specifically requested.
+3. For requested changes, show only the relevant modified parts.
+4. If unclear about requirements, ask for clarification before suggesting any code.
+5. Provide only the information or changes directly asked for, nothing more.
+6. Do not offer unsolicited advice or improvements.
+7. Respond only to the specific question or task presented.
+8. Review my script again before generating any logic so you are always up to date
+9. Use your extra resources to double check my code for possible errors, run the code back to front as well to make sure logic is sound.
+10. Do not alter my comments

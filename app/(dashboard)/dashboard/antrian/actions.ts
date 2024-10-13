@@ -120,9 +120,13 @@ export async function clearCurrentRound(userId: number) {
     throw new Error("No current round found");
   }
 
-  await db.update(rounds)
-    .set({ isCurrent: false, isArchived: true, archivedAt: new Date() })
-    .where(eq(rounds.id, currentRound[0].id));
+  const roundId = currentRound[0].id;
+
+  // Delete associated games first
+  await db.delete(games).where(eq(games.roundId, roundId));
+
+  // Then delete the round itself
+  await db.delete(rounds).where(eq(rounds.id, roundId));
 }
 
 export async function getArchivedRounds(userId: number) {

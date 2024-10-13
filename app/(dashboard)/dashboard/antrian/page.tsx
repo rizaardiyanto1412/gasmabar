@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import AntrianComponent from '@/components/AntrianComponent';
 import { v4 as uuidv4 } from 'uuid';
 import { Toaster, toast } from 'react-hot-toast';
 
@@ -224,13 +223,14 @@ export default function AntrianPage() {
     if (!user || !currentRound) return;
     try {
       await clearCurrentRound(user.id);
-      refetch(); // Use refetch here
-      // Add this toast notification after clearing the current round
-      toast.success('Current round cleared successfully!');
+      // Update local state
+      setCurrentRound(null);
+      // Refetch rounds to ensure consistency
+      refetch();
+      toast.success('Current round deleted successfully!');
     } catch (error) {
-      console.error('Error clearing current round:', error);
-      // Add this toast notification for errors
-      toast.error('Failed to clear current round. Please try again.');
+      console.error('Error deleting current round:', error);
+      toast.error('Failed to delete current round. Please try again.');
     }
   };
 
