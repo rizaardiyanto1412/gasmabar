@@ -106,8 +106,6 @@ export const rounds = pgTable('rounds', {
   userId: integer('user_id').notNull().references(() => users.id),
   roundNumber: integer('round_number').notNull(),
   isCurrent: boolean('is_current').notNull().default(false),
-  isArchived: boolean('is_archived').notNull().default(false),
-  archivedAt: timestamp('archived_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

@@ -17,8 +17,6 @@ type Round = {
   userId: number;
   roundNumber: number;
   isCurrent: boolean;
-  isArchived: boolean;
-  archivedAt: Date | null;
   games: Game[];
 };
 
